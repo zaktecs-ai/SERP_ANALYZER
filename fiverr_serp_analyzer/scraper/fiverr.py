@@ -82,7 +82,7 @@ class FiverrCollector:
         self.detail_delay_min = collection.get("detail_delay_min", 4)
         self.detail_delay_max = collection.get("detail_delay_max", 8)
         if self.collect_details:
-            self.gig_page_collector = GigPageCollector(browser_manager, config, col_logger=col_logger, err_logger=err_logger)
+            self.gig_page_collector = GigPageCollector(browser_manager, config)
         else:
             self.gig_page_collector = None
 
