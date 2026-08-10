@@ -39,12 +39,12 @@ class BrowserManager:
             sys.exit(1)
 
     def start(self):
-        """Launch a headed Chrome browser session using standard Selenium WebDriver."""
-        # Fresh temp profile to avoid conflicts with existing Chrome windows
+        """Launch a headed Chrome browser session using standard Selenium."""
+        # Use PERSISTENT profile so cookies survive between runs
+        # (Fiverr sees a returning user, not a brand-new bot every time)
         profile_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "chrome_profile",
-            str(uuid.uuid4())[:8],
         )
         os.makedirs(profile_dir, exist_ok=True)
 
@@ -71,15 +71,26 @@ class BrowserManager:
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
-            # No proxy (constraint C2)
             options.add_argument("--no-proxy-server")
-            # Hide automation flags so Fiverr doesn't immediately block
+            # Anti-detection: hide automation
+            options.add_argument("--disable-blink-features=AutomationControlled")
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option("useAutomationExtension", False)
+            # Persistent user profile so Fiverr cookies survive
+            options.add_argument(f"--user-data-dir={profile_dir}")
 
             self.driver = webdriver.Chrome(options=options)
             self.driver.set_page_load_timeout(self.page_timeout)
             self.wait = WebDriverWait(self.driver, self.page_timeout)
+
+            # CDP command: hide navigator.webdriver flag
+            try:
+                self.driver.execute_cdp_cmd(
+                    "Page.addScriptToEvaluateOnNewDocument",
+                    {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"}
+                )
+            except Exception:
+                pass
 
             # Switch to the Chrome window and bring to front
             window_handle = self.driver.current_window_handle
