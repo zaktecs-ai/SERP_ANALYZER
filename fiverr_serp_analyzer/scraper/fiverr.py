@@ -26,6 +26,8 @@ from scraper.parsers import parse_gig_card, parse_total_results
 from scraper.challenge import ChallengeDetector
 from scraper.interaction import HumanPacedInteraction
 from utils.normalization import normalize_url
+from scraper.serp_fields import parse_all_extra_fields
+from scraper.gig_page import GigPageCollector
 
 
 class FiverrCollector:
@@ -75,6 +77,14 @@ class FiverrCollector:
         self.keyword_pause_max = collection.get("keyword_pause_max", 15)
         self.max_retries = collection.get("max_retries", 2)
         self.max_challenges = collection.get("max_challenges_per_run", 3)
+        self.collect_details = collection.get("collect_gig_details", False)
+        self.max_detail_pages = min(collection.get("max_detail_pages", 10), self.top_n)
+        self.detail_delay_min = collection.get("detail_delay_min", 4)
+        self.detail_delay_max = collection.get("detail_delay_max", 8)
+        if self.collect_details:
+            self.gig_page_collector = GigPageCollector(browser_manager, config, col_logger=col_logger, err_logger=err_logger)
+        else:
+            self.gig_page_collector = None
 
         self.interaction = HumanPacedInteraction(config)
         self.challenge_detector = ChallengeDetector(
@@ -352,6 +362,14 @@ class FiverrCollector:
             "service_tags_state": parsed["service_tags"]["state"],
             "service_tags_selector": parsed["service_tags"]["selector_used"],
         }
+
+        # Add Tier 1 extra fields (country, orders, badges, etc.)
+        try:
+            extra_fields = parse_all_extra_fields(card)
+            gig_record.update(extra_fields)
+        except Exception:
+            pass
+
         return gig_record
 
     def _log_page_state(self, driver, keyword: str, context: str):
@@ -504,6 +522,29 @@ class FiverrCollector:
                             log_error(self.err_logger, keyword, "card_extraction_error",
                                       f"pos={position}: {str(e)}")
                         continue
+
+                # --- Tier 2: Gig detail page scraping (if enabled) ---
+                if self.collect_details and self.gig_page_collector is not None and result["gigs"]:
+                    print(f"  Scraping {min(len(result['gigs']), self.max_detail_pages)} gig detail pages...", end=" ", flush=True)
+                    detail_count = 0
+                    for gig in result["gigs"][:self.max_detail_pages]:
+                        try:
+                            gig_url = gig.get("url_normalized")
+                            if not gig_url:
+                                continue
+                            detail = self.gig_page_collector.collect_gig_detail(
+                                driver, gig_url, keyword
+                            )
+                            if detail and not detail.get("error"):
+                                gig.update(detail)
+                                detail_count += 1
+                            # Random delay between detail pages
+                            time.sleep(random.uniform(self.detail_delay_min, self.detail_delay_max))
+                        except Exception as e:
+                            if self.err_logger:
+                                from utils.logging import log_error
+                                log_error(self.err_logger, keyword, "detail_page_error", str(e)[:200])
+                    print(f"done ({detail_count} pages scraped)")
 
                 # If we got some gigs, success
                 if result["gigs"]:

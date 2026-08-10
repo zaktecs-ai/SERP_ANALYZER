@@ -1,5 +1,7 @@
 """Text and number normalization utilities."""
 
+from __future__ import annotations
+
 import re
 import unicodedata
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode

@@ -39,6 +39,7 @@ from analysis.keywords import (
 )
 from analysis.scoring import compute_gig_scores, compute_opportunity_score
 from database.storage import StorageManager
+from reports.competitive_report import generate_competitive_report
 from reports.csv_export import (
     export_competitor_analysis,
     export_keyword_opportunities,
@@ -126,6 +127,8 @@ def main():
                         help="Reprocess all keywords, ignoring checkpoints")
     parser.add_argument("--max-keywords", type=int, default=None,
                         help="Maximum keywords to process in this run")
+    parser.add_argument("--tier2", action="store_true",
+                        help="Enable Tier 2 deep gig detail scraping")
     args = parser.parse_args()
 
     # Load config
@@ -136,6 +139,8 @@ def main():
         config.setdefault("collection", {})["top_n"] = args.top
     if args.max_keywords:
         config.setdefault("collection", {})["max_keywords_per_run"] = args.max_keywords
+    if args.tier2:
+        config.setdefault("collection", {})["collect_gig_details"] = True
 
     # Determine keywords to process
     if args.keyword:
@@ -199,6 +204,8 @@ def main():
     # Override top_n from config
     collection_config = config.get("collection", {})
     collector.top_n = collection_config.get("top_n", 20)
+    collector.collect_details = collection_config.get("collect_gig_details", False)
+    collector.max_detail_pages = min(collection_config.get("max_detail_pages", 10), collector.top_n)
 
     # Handle SIGINT (Ctrl+C) — save checkpoint before exit
     def signal_handler(sig, frame):
@@ -453,6 +460,39 @@ def main():
                            named_clusters, errors, run_info)
             export_results_json(all_keyword_analyses, all_gig_data,
                                 named_clusters, errors, run_info)
+
+            # Generate competitive intelligence report (if detail scraping was enabled)
+            if (collection_config.get("collect_gig_details") and
+                collection_config.get("generate_competitive_report", True) and
+                all_keyword_analyses):
+
+                print("\nGenerating Competitive Intelligence Report...")
+                from analysis.competitive_intel import (
+                    title_word_frequency, pricing_by_seller_level,
+                    feature_gap_matrix, faq_topic_summary,
+                    review_sentiment_analysis, underserved_opportunities
+                )
+
+                for analysis in all_keyword_analyses[:5]:  # Top 5 keywords
+                    kw = analysis["keyword"]
+                    kw_gigs = [g for g in all_gig_data if g.get("keyword") == kw]
+                    if not kw_gigs:
+                        continue
+
+                    intel = {
+                        "title_words": title_word_frequency(kw_gigs, top_n=20),
+                        "pricing_levels": pricing_by_seller_level(kw_gigs),
+                        "feature_gaps": feature_gap_matrix(kw_gigs),
+                        "faq_topics": faq_topic_summary(kw_gigs),
+                        "sentiment": review_sentiment_analysis(kw_gigs),
+                        "opportunities": underserved_opportunities(kw_gigs, kw),
+                    }
+
+                    report_path = generate_competitive_report(kw, kw_gigs, intel)
+                    if report_path:
+                        print(f"  Competitive report saved: {report_path}")
+                    else:
+                        print(f"  Competitive report generated for: {kw}")
 
             # Gap analysis reporting
             print("\nOpportunity gaps identified:")

@@ -72,8 +72,36 @@ echo   - All reports saved to this folder
 echo ============================================
 echo.
 
+REM Ask user about Tier 2 deep scraping
+echo.
+echo ============================================
+echo   Tier 2: Deep Gig Detail Scraping
+echo ============================================
+echo   Tier 2 visits each gig's detail page to extract:
+echo     - Full description, pricing packages, FAQs
+echo     - Seller bio, tags, reviews, portfolio data
+echo.
+echo   WARNING: Tier 2 adds 4-5 minutes per keyword.
+echo   Use only when you need deep competitive research.
+echo ============================================
+echo.
+choice /C YN /M "Enable Tier 2 deep gig detail scraping (Y/N)?"
+if errorlevel 2 goto :skip_tier2
+if errorlevel 1 goto :enable_tier2
+
+:enable_tier2
+echo [OK] Tier 2 ENABLED - Deep competitive intelligence
+set TIER2_FLAG=--tier2
+goto :run
+
+:skip_tier2
+echo [OK] Tier 2 DISABLED - SERP data only (fast mode)
+set TIER2_FLAG=
+goto :run
+
+:run
 REM Run the analyzer (inside venv)
-python main.py %*
+python main.py %* %TIER2_FLAG%
 
 echo.
 echo ============================================

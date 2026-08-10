@@ -12,6 +12,15 @@ collection:
   max_keywords_per_run: 0  # 0 = unlimited
   max_challenges_per_run: 3
 
+  # Tier 2: Gig detail page scraping (deep competitive intelligence)
+  collect_gig_details: true    # true = scrape detail pages, false = SERP only
+  max_detail_pages: 10         # how many gig detail pages per keyword (1-20)
+  detail_delay_min: 4          # min seconds between detail page visits
+  detail_delay_max: 8          # max seconds between detail page visits
+
+reports:
+  generate_competitive_report: true  # generate competitive intel markdown report
+
 interaction:
   natural_scroll: true
   mouse_movement: true
