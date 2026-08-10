@@ -7,6 +7,7 @@ the human operator.
 
 import time
 import sys
+import platform
 from datetime import datetime, timezone
 
 from scraper.selectors import (
@@ -33,12 +34,11 @@ class ChallengeDetector:
         """
         try:
             page_title = driver.title.lower()
-            page_source = driver.page_source.lower()
         except Exception:
             # If we can't even read the page, assume it might be challenged
             return True
 
-        # Check title markers
+        # Check title markers first (cheap — no DOM round-trip)
         for marker in CHALLENGE_TITLE_MARKERS:
             if marker in page_title:
                 return True
@@ -55,7 +55,12 @@ class ChallengeDetector:
                 # Other errors (stale element, etc.) — skip this selector
                 continue
 
-        # Check body text markers
+        # Check body text markers (expensive — fetch page_source only when needed)
+        try:
+            page_source = driver.page_source.lower()
+        except Exception:
+            return True
+
         for marker in CHALLENGE_BODY_MARKERS:
             if marker in page_source:
                 return True
@@ -81,21 +86,33 @@ class ChallengeDetector:
         sys.stdout.write("\a\a\a")
         sys.stdout.flush()
 
-        # Show a Windows popup dialog so the user KNOWS to look at the browser
-        try:
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(
-                0,
-                "Fiverr showed a security check/CAPTCHA.\n\n"
-                "SOLVE IT IN THE CHROME BROWSER WINDOW:\n"
-                "1. Click the CAPTCHA checkbox / complete the puzzle\n"
-                "2. Wait for Fiverr results to load\n\n"
-                "Then come back here and press ENTER.",
-                "Fiverr SERP Analyzer - CHALLENGE #{} DETECTED".format(self.challenge_count),
-                0x40  # MB_ICONINFORMATION
-            )
-        except Exception:
-            pass
+        # Show a popup dialog so the user KNOWS to look at the browser
+        if platform.system() == "Windows":
+            try:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(
+                    0,
+                    "Fiverr showed a security check/CAPTCHA.\n\n"
+                    "SOLVE IT IN THE CHROME BROWSER WINDOW:\n"
+                    "1. Click the CAPTCHA checkbox / complete the puzzle\n"
+                    "2. Wait for Fiverr results to load\n\n"
+                    "Then come back here and press ENTER.",
+                    "Fiverr SERP Analyzer - CHALLENGE #{} DETECTED".format(self.challenge_count),
+                    0x40  # MB_ICONINFORMATION
+                )
+            except Exception:
+                pass
+        else:
+            # Cross-platform fallback: print a prominent alert banner
+            print("\n" + "!" * 60)
+            print("!!! Fiverr SERP Analyzer - CHALLENGE #{} DETECTED !!!".format(self.challenge_count))
+            print("!" * 60)
+            print("  Fiverr showed a security check/CAPTCHA.")
+            print("  SOLVE IT IN THE CHROME BROWSER WINDOW:")
+            print("  1. Click the CAPTCHA checkbox / complete the puzzle")
+            print("  2. Wait for Fiverr results to load")
+            print("  Then come back here and press ENTER.")
+            print("!" * 60 + "\n")
 
         # Prominent console banner
         print("\n" + "=" * 60)

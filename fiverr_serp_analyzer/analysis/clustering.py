@@ -27,10 +27,6 @@ def _simple_stem(word: str) -> str:
         word = word[:-4]
     elif word.endswith("ers"):
         word = word[:-3]
-    elif word.endswith("ers"):
-        word = word[:-3]
-    elif word.endswith("ing"):
-        word = word[:-3]
     elif word.endswith("ed"):
         word = word[:-2]
     elif word.endswith("s") and not word.endswith("ss"):

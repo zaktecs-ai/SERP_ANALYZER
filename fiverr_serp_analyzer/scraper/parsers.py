@@ -5,7 +5,8 @@ All parsers tolerate missing nodes — missing data is None, never fabricated.
 """
 
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from typing import Optional
 
 from scraper.selectors import (
@@ -31,14 +32,14 @@ def _try_selectors(element: WebElement, selectors: list, attr: str = None) -> tu
     """Try a list of CSS selectors on an element. Returns (text, matched_selector)."""
     for sel in selectors:
         try:
-            found = element.find_element("css selector", sel)
+            found = element.find_element(By.CSS_SELECTOR, sel)
             if attr:
                 value = found.get_attribute(attr)
             else:
                 value = found.text
             if value and value.strip():
                 return value.strip(), sel
-        except NoSuchElementException:
+        except (NoSuchElementException, StaleElementReferenceException):
             continue
     return None, None
 
@@ -47,14 +48,14 @@ def _try_selectors_global(driver, selectors: list, attr: str = None) -> tuple:
     """Try selectors globally on the page. Returns (text, matched_selector)."""
     for sel in selectors:
         try:
-            found = driver.find_element("css selector", sel)
+            found = driver.find_element(By.CSS_SELECTOR, sel)
             if attr:
                 value = found.get_attribute(attr)
             else:
                 value = found.text
             if value and value.strip():
                 return value.strip(), sel
-        except NoSuchElementException:
+        except (NoSuchElementException, StaleElementReferenceException):
             continue
     return None, None
 
@@ -193,7 +194,7 @@ def parse_badges(card: WebElement) -> dict:
     selector_used = None
     for sel in BADGES_SELECTORS:
         try:
-            elements = card.find_elements("css selector", sel)
+            elements = card.find_elements(By.CSS_SELECTOR, sel)
             if elements:
                 selector_used = sel
                 for el in elements:
@@ -201,7 +202,7 @@ def parse_badges(card: WebElement) -> dict:
                     if text:
                         badges.append(text)
                 break
-        except NoSuchElementException:
+        except (NoSuchElementException, StaleElementReferenceException):
             continue
     return {
         "raw": badges,

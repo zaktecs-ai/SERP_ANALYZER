@@ -18,10 +18,39 @@ import os
 import signal
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+
+from analysis.clustering import cluster_keywords, name_clusters
+from analysis.competition import analyze_competition, analyze_serp_concentration
+from analysis.gap_analysis import (
+    analyze_title_terms,
+    find_opportunity_gaps,
+    identify_underserved_services,
+    per_keyword_competitor_extremes,
+)
+from analysis.keywords import (
+    calculate_demand_signal,
+    calculate_keyword_relevance,
+    classify_intent,
+)
+from analysis.scoring import compute_gig_scores, compute_opportunity_score
+from database.storage import StorageManager
+from reports.csv_export import (
+    export_competitor_analysis,
+    export_keyword_opportunities,
+    export_keyword_summary,
+    export_top20_gigs,
+)
+from reports.excel import generate_excel
+from reports.json_export import export_results_json
+from scraper.browser import BrowserManager
+from scraper.fiverr import FiverrCollector
+from utils.checkpoint import CheckpointManager
+from utils.logging import log_error, log_collection, setup_logging
 
 
 def load_config(config_path: str = "config.yaml") -> dict:
@@ -124,11 +153,9 @@ def main():
         sys.exit(0)
 
     # Set up logging
-    from utils.logging import setup_logging, log_collection, log_error
     col_logger, err_logger = setup_logging()
 
     # Set up checkpoint manager
-    from utils.checkpoint import CheckpointManager
     checkpoint = CheckpointManager()
 
     # Filter keywords based on checkpoint
@@ -148,12 +175,10 @@ def main():
     checkpoint.set_run_id(run_id)
 
     # Initialize database
-    from database.storage import StorageManager
     storage = StorageManager()
     storage.create_run(run_id, len(pending))
 
     # Initialize browser
-    from scraper.browser import BrowserManager
     browser = BrowserManager(config)
     driver = browser.start()
 
@@ -167,7 +192,6 @@ def main():
         print(f"  Warning: Could not pre-load Fiverr: {e}")
 
     # Initialize collector
-    from scraper.fiverr import FiverrCollector
     collector = FiverrCollector(
         browser, config, col_logger=col_logger, err_logger=err_logger
     )
@@ -233,24 +257,9 @@ def main():
 
             # Run analysis for this keyword
             print("  Analyzing competitors...", end=" ", flush=True)
-            from analysis.keywords import (
-                classify_intent,
-                calculate_keyword_relevance,
-                calculate_demand_signal,
-            )
-            from analysis.competition import (
-                analyze_competition,
-                analyze_serp_concentration,
-            )
-            from analysis.scoring import compute_opportunity_score, compute_gig_scores
-            from analysis.gap_analysis import (
-                analyze_title_terms,
-                identify_underserved_services,
-                per_keyword_competitor_extremes,
-            )
 
             gigs_data = result.get("gigs", [])
-            keyword = result.get("keyword", keyword)
+            kw_from_result = result.get("keyword", keyword)
 
             # Intent classification
             intent = classify_intent(keyword)
@@ -379,7 +388,6 @@ def main():
         print("\n\nInterrupted. Saving progress...")
     except Exception as e:
         print(f"\nFATAL ERROR: {e}")
-        import traceback
         traceback.print_exc()
         log_error(err_logger, "GLOBAL", "fatal_error", str(e)[:500])
 
@@ -396,7 +404,6 @@ def main():
         if all_keyword_analyses:
             # Cluster keywords
             print("\nClustering keywords...")
-            from analysis.clustering import cluster_keywords, name_clusters
             kw_list = [a["keyword"] for a in all_keyword_analyses]
             c = cluster_keywords(kw_list)
             named_clusters = name_clusters(c)
@@ -413,14 +420,6 @@ def main():
 
         # Generate reports
         print("\nGenerating reports...")
-        from reports.csv_export import (
-            export_keyword_summary,
-            export_top20_gigs,
-            export_competitor_analysis,
-            export_keyword_opportunities,
-        )
-        from reports.excel import generate_excel
-        from reports.json_export import export_results_json
 
         if all_keyword_analyses:
             export_keyword_summary(all_keyword_analyses)
@@ -457,7 +456,6 @@ def main():
 
             # Gap analysis reporting
             print("\nOpportunity gaps identified:")
-            from analysis.gap_analysis import find_opportunity_gaps
             gaps = find_opportunity_gaps(all_keyword_analyses)
             if gaps:
                 for gap in gaps[:5]:

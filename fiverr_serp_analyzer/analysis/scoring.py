@@ -5,6 +5,24 @@ All scores are 0-100. Higher opportunity = better keyword to target.
 """
 
 
+def _compute_strength_from_reviews(reviews) -> float:
+    """Compute a 0-100 strength score from a review count."""
+    if reviews is None:
+        return 50.0
+    if reviews > 1000:
+        return 95.0
+    elif reviews > 500:
+        return 85.0
+    elif reviews > 100:
+        return 70.0
+    elif reviews > 50:
+        return 55.0
+    elif reviews > 10:
+        return 40.0
+    else:
+        return 20.0
+
+
 def compute_opportunity_score(
     demand_score: float,
     intent_score: float,
@@ -79,6 +97,27 @@ def compute_opportunity_score(
     }
 
 
+def _compute_review_strength(reviews) -> float:
+    """Compute strength score from review count (0-100 scale).
+
+    Shared by seller_strength and review_strength — identical logic,
+    different semantic labels in the output.
+    """
+    if reviews is None:
+        return 50.0
+    if reviews > 1000:
+        return 95.0
+    elif reviews > 500:
+        return 85.0
+    elif reviews > 100:
+        return 70.0
+    elif reviews > 50:
+        return 55.0
+    elif reviews > 10:
+        return 40.0
+    return 20.0
+
+
 def compute_gig_scores(gig_data: dict, keyword: str) -> dict:
     """Compute per-gig analysis scores.
 
@@ -99,40 +138,13 @@ def compute_gig_scores(gig_data: dict, keyword: str) -> dict:
     # Keyword relevance score
     kw_rel_score = title_opt_score  # Same as title optimization for now
 
-    # Seller strength score
+    # Reviews and rating
     reviews = parse_number(gig_data.get("review_count_cleaned", ""))
     rating = parse_rating(gig_data.get("seller_rating_normalized", ""))
 
-    seller_strength = 50.0
-    if reviews is not None:
-        if reviews > 1000:
-            seller_strength = 95
-        elif reviews > 500:
-            seller_strength = 85
-        elif reviews > 100:
-            seller_strength = 70
-        elif reviews > 50:
-            seller_strength = 55
-        elif reviews > 10:
-            seller_strength = 40
-        else:
-            seller_strength = 20
-
-    # Review strength
-    review_strength = 50.0
-    if reviews is not None:
-        if reviews > 1000:
-            review_strength = 95
-        elif reviews > 500:
-            review_strength = 85
-        elif reviews > 100:
-            review_strength = 70
-        elif reviews > 50:
-            review_strength = 55
-        elif reviews > 10:
-            review_strength = 40
-        else:
-            review_strength = 20
+    # Seller and review strength (same underlying calculation)
+    seller_strength = _compute_review_strength(reviews)
+    review_strength = _compute_review_strength(reviews)
 
     # Rating strength
     rating_strength = 50.0

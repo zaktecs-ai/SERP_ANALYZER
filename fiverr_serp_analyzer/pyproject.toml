@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fiverr-serp-analyzer"
+version = "1.0.0"
+description = "Fiverr SERP keyword research and opportunity analysis tool"
+requires-python = ">=3.9"
+readme = {file = "README.md", content-type = "text/markdown"}
+license = {text = "MIT"}
+authors = [
+    {name = "Fiverr SERP Analyzer Contributors"},
+]
+keywords = ["fiverr", "serp", "keyword-research", "seo", "gig-analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "selenium>=4.15.0",
+    "undetected-chromedriver>=3.5.4",
+    "pyyaml>=6.0",
+    "openpyxl>=3.1.0",
+    "colorama>=0.4.6",
+]
+
+[project.scripts]
+fiverr-serp-analyzer = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/example/fiverr-serp-analyzer"
+Issues = "https://github.com/example/fiverr-serp-analyzer/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]

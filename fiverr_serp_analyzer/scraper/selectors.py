@@ -24,6 +24,9 @@ TOTAL_RESULTS_SELECTORS = [
     "[data-cy='total-results']",
     "div.search-results-header p",
     "h1 + p",
+    "h2",
+    "p.text-display-seven",
+    "span.co-grey-700",
     "span[class*='total']",
 ]
 
@@ -34,6 +37,7 @@ GIG_CARD_SELECTORS = [
     "div.gig-wrapper",
     "[data-cy='gig-card']",
     "div[class*='gig-card']",
+    "a[href*='/gig/']",
 ]
 
 # --- Gig identity selectors ---
@@ -68,6 +72,7 @@ SELLER_NAME_SELECTORS = [
     "a.seller-name",
     "[data-cy='seller-name']",
     "div.seller-info a",
+    "a[href*='/user/'] span",
     "a[href*='/user/']",
     "span.seller-name",
 ]
@@ -106,6 +111,8 @@ SELLER_REVIEW_COUNT_SELECTORS = [
 
 STARTING_PRICE_SELECTORS = [
     "span.text-bold.co-grey-1200",
+    "a[class*='_0ed0fc'] span span",
+    "span[class*='co-grey-1200'] span",
     "span.price",
     "[data-cy='gig-price']",
     "div.price-wrapper span",
@@ -121,6 +128,7 @@ DELIVERY_TIME_SELECTORS = [
     "span.delivery-time",
     "[data-cy='delivery-time']",
     "span[class*='delivery']",
+    "li",
     "li:contains('delivery')",
 ]
 
