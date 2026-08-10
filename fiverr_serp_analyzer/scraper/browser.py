@@ -1,6 +1,6 @@
 """Browser management for the Fiverr SERP Analyzer.
 
-Uses undetected-chromedriver for a more natural browser fingerprint.
+Uses standard Selenium WebDriver with Chrome.
 Headed mode is enforced — headless is prohibited (constraint C1).
 No proxy configuration (constraint C2).
 """
@@ -12,6 +12,9 @@ import uuid
 import platform
 import subprocess
 from pathlib import Path
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import WebDriverException
 
@@ -36,17 +39,8 @@ class BrowserManager:
             sys.exit(1)
 
     def start(self):
-        """Launch a headed Chrome browser session using undetected-chromedriver."""
-        try:
-            import undetected_chromedriver as uc
-        except ImportError:
-            print("ERROR: undetected-chromedriver not installed.")
-            print("Run: pip install undetected-chromedriver")
-            sys.exit(1)
-
-        # Use a FRESH Chrome profile - guarantees a new visible window
-        # even if Chrome is already running on this system.
-        # Use a unique profile dir per run to avoid stale lock file issues.
+        """Launch a headed Chrome browser session using standard Selenium WebDriver."""
+        # Fresh temp profile to avoid conflicts with existing Chrome windows
         profile_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "chrome_profile",
@@ -54,45 +48,36 @@ class BrowserManager:
         )
         os.makedirs(profile_dir, exist_ok=True)
 
-        # MINIMIZE THE CONSOLE WINDOW so Chrome is the ONLY visible window.
-        # This guarantees the user sees the Chrome browser.
-        # Windows-only: ctypes.windll is unavailable on Linux/Mac.
+        # Minimize console so Chrome is visible (Windows-only)
         if IS_WINDOWS:
             try:
                 import ctypes
                 hwnd = ctypes.windll.kernel32.GetConsoleWindow()
                 if hwnd:
-                    ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+                    ctypes.windll.user32.ShowWindow(hwnd, 6)
             except Exception:
                 pass
 
         try:
-            print("Starting Chrome browser (undetected mode)...")
+            print("Starting Chrome browser...")
 
-            options = uc.ChromeOptions()
+            options = Options()
             options.add_argument("--start-maximized")
             options.add_argument("--window-size=1280,900")
             options.add_argument("--window-position=0,0")
             options.add_argument("--no-first-run")
             options.add_argument("--no-default-browser-check")
             options.add_argument("--disable-popup-blocking")
-
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
             # No proxy (constraint C2)
             options.add_argument("--no-proxy-server")
+            # Hide automation flags so Fiverr doesn't immediately block
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option("useAutomationExtension", False)
 
-            # User agent — standard Chrome
-            options.add_argument(
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            )
-
-            self.driver = uc.Chrome(
-                options=options,
-                user_data_dir=profile_dir,
-                headless=False,
-                version_main=None,
-            )
+            self.driver = webdriver.Chrome(options=options)
             self.driver.set_page_load_timeout(self.page_timeout)
             self.wait = WebDriverWait(self.driver, self.page_timeout)
 
