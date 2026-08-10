@@ -98,76 +98,88 @@ class FiverrCollector:
     # ------------------------------------------------------------------
 
     def _dismiss_popups(self, driver):
-        """Aggressively dismiss any overlay, tooltip, cookie banner, or modal.
+        """Aggressively dismiss Fiverr overlays, tooltips, and modals.
 
-        Fiverr frequently shows:
-          - "Hourly rates filter [New]" tooltip with a "Got it" button
-          - Cookie consent banners
-          - Newsletter / sign-up modals
-          - Promotional overlays with close buttons
-
-        Strategy (best-effort, never raises):
-          1. Look for buttons whose visible text matches known dismissal
-             phrases and click them.
-          2. Click any close/X controls found via ARIA / class selectors.
-          3. Press Escape to collapse any remaining modals.
+        Fiverr frequently shows a "Got it" tooltip for new features
+        (e.g. "Hourly rates filter [New]") that blocks scraping.
+        This method tries MULTIPLE approaches to dismiss it.
         """
-        try:
-            # --- Step 1: click labelled dismiss buttons -------------------
-            for text in self._POPUP_BUTTON_TEXTS:
-                try:
-                    buttons = driver.find_elements(
-                        By.XPATH,
-                        (
-                            "//button["
-                            "  translate(normalize-space(text()),"
-                            "  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
-                            "  'abcdefghijklmnopqrstuvwxyz') = '{text}'"
-                            "] | //a["
-                            "  translate(normalize-space(text()),"
-                            "  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
-                            "  'abcdefghijklmnopqrstuvwxyz') = '{text}'"
-                            "] | //span[@role='button']["
-                            "  translate(normalize-space(text()),"
-                            "  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
-                            "  'abcdefghijklmnopqrstuvwxyz') = '{text}'"
-                            "]"
-                        ).format(text=text)
-                    )
-                    for btn in buttons:
-                        try:
-                            if btn.is_displayed():
-                                btn.click()
-                                time.sleep(0.3)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+        # Give the popup time to render before attempting to dismiss
+        time.sleep(2)
 
-            # --- Step 2: click close / X controls -------------------------
-            for sel in self._POPUP_CLOSE_SELECTORS:
-                try:
-                    elements = driver.find_elements(By.CSS_SELECTOR, sel)
-                    for el in elements:
-                        try:
-                            if el.is_displayed():
-                                el.click()
-                                time.sleep(0.2)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-            # --- Step 3: press Escape ------------------------------------
+        # Approach 1: Direct "Got it" button — most common Fiverr popup
+        got_it_selectors = [
+            "button:contains('Got it')",
+            "button:contains('GOT IT')",
+            "button:contains('got it')",
+        ]
+        for css in got_it_selectors:
             try:
-                body = driver.find_element(By.TAG_NAME, "body")
-                body.send_keys(Keys.ESCAPE)
-                time.sleep(0.3)
+                btns = driver.find_elements(By.CSS_SELECTOR, css.replace(":contains('","').replace("')",""))
+                for b in btns:
+                    txt = (b.text or "").strip().lower()
+                    if txt in ("got it", "got it!"):
+                        if b.is_displayed():
+                            b.click()
+                            time.sleep(0.5)
             except Exception:
                 pass
 
+        # Approach 2: Any button whose text contains "got it" (XPATH)
+        try:
+            btns = driver.find_elements(By.XPATH,
+                "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'got it')]")
+            for b in btns:
+                try:
+                    if b.is_displayed():
+                        b.click()
+                        time.sleep(0.3)
+                except Exception:
+                    pass
         except Exception:
-            # _dismiss_popups is best-effort; never break the main flow
+            pass
+
+        # Approach 3: Click ALL visible buttons with known dismiss texts
+        for text in self._POPUP_BUTTON_TEXTS:
+            try:
+                btns = driver.find_elements(By.XPATH,
+                    f"//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text}')]")
+                for b in btns:
+                    try:
+                        if b.is_displayed():
+                            b.click()
+                            time.sleep(0.2)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        # Approach 4: CSS close selectors
+        for sel in self._POPUP_CLOSE_SELECTORS:
+            try:
+                for el in driver.find_elements(By.CSS_SELECTOR, sel):
+                    try:
+                        if el.is_displayed():
+                            el.click()
+                            time.sleep(0.2)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        # Approach 5: Escape key
+        try:
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            time.sleep(0.3)
+        except Exception:
+            pass
+
+        # Approach 6: Click anywhere outside popup on body
+        try:
+            body = driver.find_element(By.TAG_NAME, "body")
+            webdriver.ActionChains(driver).move_to_element_with_offset(body, 10, 10).click().perform()
+            time.sleep(0.3)
+        except Exception:
             pass
 
     def _build_search_url(self, keyword: str) -> str:
