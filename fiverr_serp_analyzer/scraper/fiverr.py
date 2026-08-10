@@ -107,33 +107,17 @@ class FiverrCollector:
         # Give the popup time to render before attempting to dismiss
         time.sleep(2)
 
-        # Approach 1: Direct "Got it" button — most common Fiverr popup
-        got_it_selectors = [
-            "button:contains('Got it')",
-            "button:contains('GOT IT')",
-            "button:contains('got it')",
-        ]
-        for css in got_it_selectors:
-            try:
-                btns = driver.find_elements(By.CSS_SELECTOR, css.replace(":contains('","').replace("')",""))
-                for b in btns:
-                    txt = (b.text or "").strip().lower()
-                    if txt in ("got it", "got it!"):
-                        if b.is_displayed():
-                            b.click()
-                            time.sleep(0.5)
-            except Exception:
-                pass
-
-        # Approach 2: Any button whose text contains "got it" (XPATH)
+        # Approach 1: "Got it" button via XPATH — most common Fiverr popup
         try:
             btns = driver.find_elements(By.XPATH,
-                "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'got it')]")
+                "//button[contains(translate(text(), "
+                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+                "'abcdefghijklmnopqrstuvwxyz'), 'got it')]")
             for b in btns:
                 try:
                     if b.is_displayed():
                         b.click()
-                        time.sleep(0.3)
+                        time.sleep(0.5)
                 except Exception:
                     pass
         except Exception:
