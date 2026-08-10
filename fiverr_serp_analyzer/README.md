@@ -5,27 +5,64 @@ keywords. Collects and analyzes the top 20 visible Fiverr gigs for each keyword
 from public, logged-out search results, and produces advanced keyword
 opportunity / competition analysis.
 
-## Installation
+## ⚡ Quick Start — 2-Click Setup
+
+The project uses a **virtual environment** (`.venv`) to keep all libraries
+isolated from your system Python. No conflicts with anything else on your
+computer.
+
+### Windows
+
+| Step | What to do | When |
+|------|-----------|------|
+| 1 | Double-click **`setup.bat`** | First time only |
+| 2 | Double-click **`run.bat`** | Every time after |
+
+**`setup.bat`** creates the isolated `.venv` folder and installs all
+dependencies. Takes ~30 seconds, one-time only.
+
+**`run.bat`** automatically activates the environment, checks dependencies,
+and launches the analyzer. Also creates the `.venv` automatically if you
+skipped step 1.
+
+### Linux / macOS
+
+```bash
+chmod +x setup.sh run.sh
+
+./setup.sh    # First time only (creates .venv, installs deps)
+./run.sh      # Every time after
+```
+
+### Manual (any OS)
 
 ```bash
 cd fiverr_serp_analyzer
+
+# Create isolated environment (first time)
+python -m venv .venv
+
+# Activate it
+.venv\Scripts\activate     # Windows (Command Prompt)
+.venv\Scripts\Activate.ps1 # Windows (PowerShell)
+source .venv/bin/activate   # Linux / macOS
+
+# Install dependencies (first time)
 pip install -r requirements.txt
-```
 
-## Quick Start
-
-### One-Click (Windows)
-
-Double-click **`run.bat`** — it automatically:
-1. Checks Python is installed
-2. Installs dependencies if needed
-3. Runs the analyzer with your `keywords.csv`
-
-### Command Line
-
-```bash
+# Run
 python main.py --input keywords.csv
 ```
+
+### What's the virtual environment for?
+
+| | Without venv (old) | With venv (new) |
+|---|---|---|
+| Libraries installed in | System-wide Python folder | Project's `.venv/` folder only |
+| Conflicts with other projects | Yes — version clashes possible | Zero — completely isolated |
+| Uninstall / cleanup | Messy, affects other projects | Just delete the `.venv/` folder |
+| Works on any PC without admin | Sometimes needs admin rights | Always works, no admin needed |
+
 
 ## Usage
 
