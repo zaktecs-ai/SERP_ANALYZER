@@ -39,9 +39,12 @@ class BrowserManager:
             sys.exit(1)
 
     def start(self):
-        """Launch a headed Chrome browser session using standard Selenium."""
-        # Use PERSISTENT profile so cookies survive between runs
-        # (Fiverr sees a returning user, not a brand-new bot every time)
+        """Launch a headed Chrome browser with maximum stealth.
+
+        Uses undetected-chromedriver with explicit version targeting for Chrome 151.
+        Fallback to standard Selenium with CDP stealth if UC fails.
+        """
+        # Persistent profile — cookies survive, Fiverr sees repeat visitor
         profile_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "chrome_profile",
@@ -59,38 +62,69 @@ class BrowserManager:
                 pass
 
         try:
-            print("Starting Chrome browser...")
-
-            options = Options()
-            options.add_argument("--start-maximized")
-            options.add_argument("--window-size=1280,900")
-            options.add_argument("--window-position=0,0")
-            options.add_argument("--no-first-run")
-            options.add_argument("--no-default-browser-check")
-            options.add_argument("--disable-popup-blocking")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--no-proxy-server")
-            # Anti-detection: hide automation
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-            # Persistent user profile so Fiverr cookies survive
-            options.add_argument(f"--user-data-dir={profile_dir}")
-
-            self.driver = webdriver.Chrome(options=options)
-            self.driver.set_page_load_timeout(self.page_timeout)
-            self.wait = WebDriverWait(self.driver, self.page_timeout)
-
-            # CDP command: hide navigator.webdriver flag
+            # === STRATEGY 1: undetected-chromedriver (stealthiest) ===
+            driver_started = False
             try:
+                import undetected_chromedriver as uc
+                print("Starting Chrome browser (undetected-chromedriver)...")
+
+                options = uc.ChromeOptions()
+                options.add_argument("--start-maximized")
+                options.add_argument("--window-size=1280,900")
+                options.add_argument("--window-position=0,0")
+                options.add_argument("--no-first-run")
+                options.add_argument("--no-default-browser-check")
+                options.add_argument("--disable-popup-blocking")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--disable-gpu")
+                options.add_argument("--no-proxy-server")
+
+                self.driver = uc.Chrome(
+                    options=options,
+                    user_data_dir=profile_dir,
+                    headless=False,
+                    version_main=151,
+                    use_subprocess=True,
+                )
+                driver_started = True
+                print("  [OK] undetected-chromedriver started successfully")
+
+            except Exception as uc_e:
+                print(f"  undetected-chromedriver failed: {str(uc_e)[:150]}")
+                print("  [FALLBACK] Launching standard Selenium with stealth...")
+
+            # === STRATEGY 2: standard Selenium with CDP stealth ===
+            if not driver_started:
+                opts = Options()
+                opts.add_argument("--start-maximized")
+                opts.add_argument("--window-size=1280,900")
+                opts.add_argument("--window-position=0,0")
+                opts.add_argument("--no-first-run")
+                opts.add_argument("--no-default-browser-check")
+                opts.add_argument("--disable-popup-blocking")
+                opts.add_argument("--no-sandbox")
+                opts.add_argument("--disable-dev-shm-usage")
+                opts.add_argument("--disable-gpu")
+                opts.add_argument("--no-proxy-server")
+                opts.add_argument("--disable-blink-features=AutomationControlled")
+                opts.add_argument(f"--user-data-dir={profile_dir}")
+                opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+                opts.add_experimental_option("useAutomationExtension", False)
+                opts.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36")
+
+                self.driver = webdriver.Chrome(options=opts)
+
+                # CDP: hide webdriver BEFORE first navigation
                 self.driver.execute_cdp_cmd(
                     "Page.addScriptToEvaluateOnNewDocument",
-                    {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"}
+                    {"source": """
+                        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                        Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+                        Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});
+                    """}
                 )
-            except Exception:
-                pass
+                print("  [OK] Standard Selenium + CDP stealth active")
 
             # Switch to the Chrome window and bring to front
             window_handle = self.driver.current_window_handle

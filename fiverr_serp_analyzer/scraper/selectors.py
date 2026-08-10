@@ -187,14 +187,12 @@ CHALLENGE_DOM_SELECTORS = [
 
 CHALLENGE_BODY_MARKERS = [
     "verify you are human",
-    "security check",
-    "are you a robot",
-    "unusual traffic from your computer",
-    "we've detected unusual activity",
     "please verify you're a human",
     "complete the security check",
     "access to this page has been denied",
     "your request has been blocked",
+    "press and hold",
+    "to confirm you are human",
 ]
 
 # --- Extra SERP-level fields (Tier 1) ---

@@ -46,7 +46,7 @@ class ChallengeDetector:
         # Check DOM selectors
         for sel in CHALLENGE_DOM_SELECTORS:
             try:
-                el = driver.find_element("css selector", sel)
+                el = driver.find_element(By.CSS_SELECTOR, sel)
                 if el.is_displayed():
                     return True
             except NoSuchElementException:
