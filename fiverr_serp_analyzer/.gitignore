@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+
+# Generated data (screenshots, DBs, logs, reports)
+data/
+logs/
+screenshots/
+chrome_profile/
+*.db
+*.db-wal
+*.db-shm
+*.csv
+*.xlsx
+!keywords.csv
+*.json
+!results.json
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Checkpoint files
+data/checkpoint.json

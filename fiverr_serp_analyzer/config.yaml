@@ -1,0 +1,25 @@
+browser:
+  headless: false          # locked — app refuses to start if set true
+  page_timeout: 30
+
+collection:
+  top_n: 20
+  delay_min: 3
+  delay_max: 7
+  keyword_pause_min: 8
+  keyword_pause_max: 15
+  max_retries: 2
+  max_keywords_per_run: 0  # 0 = unlimited
+  max_challenges_per_run: 3
+
+interaction:
+  natural_scroll: true
+  mouse_movement: true
+  idle_probability: 0.2
+
+analysis:
+  demand_weight: 0.25
+  intent_weight: 0.20
+  relevance_weight: 0.20
+  competition_weight: 0.25
+  serp_weakness_weight: 0.10
