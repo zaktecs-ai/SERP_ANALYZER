@@ -190,11 +190,14 @@ def main():
     # Navigate to Fiverr immediately so the user can SEE the browser is working
     try:
         print("  Opening Fiverr home page...")
+        driver.set_page_load_timeout(60)
         driver.get("https://www.fiverr.com/")
         driver.set_window_rect(0, 0, 1280, 900)
         print("  Fiverr loaded in the visible Chrome window.")
-    except Exception as e:
-        print(f"  Warning: Could not pre-load Fiverr: {e}")
+    except Exception:
+        print("  (Fiverr homepage slow to load — continuing anyway)")
+    finally:
+        driver.set_page_load_timeout(config.get("browser", {}).get("page_timeout", 90))
 
     # Initialize collector
     collector = FiverrCollector(

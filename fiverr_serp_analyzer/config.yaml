@@ -1,6 +1,6 @@
 browser:
   headless: false          # locked — app refuses to start if set true
-  page_timeout: 30
+  page_timeout: 90         # seconds — Fiverr needs more time with stealth browser
 
 collection:
   top_n: 20
