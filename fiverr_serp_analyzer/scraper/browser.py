@@ -9,9 +9,13 @@ import sys
 import os
 import time
 import uuid
+import platform
+import subprocess
 from pathlib import Path
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import WebDriverException
+
+IS_WINDOWS = platform.system() == "Windows"
 
 
 class BrowserManager:
@@ -52,13 +56,15 @@ class BrowserManager:
 
         # MINIMIZE THE CONSOLE WINDOW so Chrome is the ONLY visible window.
         # This guarantees the user sees the Chrome browser.
-        try:
-            import ctypes
-            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-            if hwnd:
-                ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
-        except Exception:
-            pass
+        # Windows-only: ctypes.windll is unavailable on Linux/Mac.
+        if IS_WINDOWS:
+            try:
+                import ctypes
+                hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+                if hwnd:
+                    ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+            except Exception:
+                pass
 
         try:
             print("Starting Chrome browser (undetected mode)...")
@@ -131,53 +137,128 @@ class BrowserManager:
             sys.exit(1)
 
     def _force_visible_topmost(self):
-        """Force the Chrome window to be visible AND always-on-top using SetWindowPos."""
-        try:
-            import ctypes
+        """Force the Chrome window to be visible AND always-on-top.
 
-            user32 = ctypes.windll.user32
-            HWND_TOPMOST = -1
-            SWP_NOMOVE = 0x0002
-            SWP_NOSIZE = 0x0001
-            SWP_SHOWWINDOW = 0x0040
+        Uses SetWindowPos on Windows. On Linux, tries xdotool then wmctrl.
+        On macOS, uses osascript to bring Chrome to the foreground.
+        """
+        if IS_WINDOWS:
+            try:
+                import ctypes
 
-            hwnd = self._find_chrome_window()
-            if hwnd:
-                user32.ShowWindow(hwnd, 5)  # SW_SHOW
-                user32.SetWindowPos(
-                    hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+                user32 = ctypes.windll.user32
+                HWND_TOPMOST = -1
+                SWP_NOMOVE = 0x0002
+                SWP_NOSIZE = 0x0001
+                SWP_SHOWWINDOW = 0x0040
+
+                hwnd = self._find_chrome_window()
+                if hwnd:
+                    user32.ShowWindow(hwnd, 5)  # SW_SHOW
+                    user32.SetWindowPos(
+                        hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+                    )
+                    time.sleep(2)
+                    HWND_NOTOPMOST = -2
+                    user32.SetWindowPos(
+                        hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+                    )
+                    user32.SetForegroundWindow(hwnd)
+            except Exception:
+                pass
+        elif sys.platform == "darwin":
+            # macOS: use osascript to bring Chrome to the front
+            try:
+                subprocess.run(
+                    ['osascript', '-e',
+                     'tell application "Google Chrome" to activate'],
+                    capture_output=True, timeout=5
                 )
-                time.sleep(2)
-                HWND_NOTOPMOST = -2
-                user32.SetWindowPos(
-                    hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+            except Exception:
+                pass
+        else:
+            # Linux: try xdotool, then wmctrl as fallback
+            try:
+                subprocess.run(
+                    ['xdotool', 'search', '--name', 'Chrome', 'windowactivate'],
+                    capture_output=True, timeout=5
                 )
-                user32.SetForegroundWindow(hwnd)
-        except Exception:
-            pass
+            except FileNotFoundError:
+                try:
+                    subprocess.run(
+                        ['wmctrl', '-a', 'Chrome'],
+                        capture_output=True, timeout=5
+                    )
+                except FileNotFoundError:
+                    print("Note: xdotool/wmctrl not found — cannot force Chrome to top.")
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
     def _bring_to_front(self):
-        """Bring the Chrome browser window to the foreground using Windows API."""
-        try:
-            import ctypes
-            import time
+        """Bring the Chrome browser window to the foreground.
 
-            user32 = ctypes.windll.user32
-            user32.FlashWindow(user32.GetForegroundWindow(), True)
+        Uses FlashWindow + SetForegroundWindow on Windows.
+        On Linux, tries xdotool then wmctrl.
+        On macOS, uses osascript.
+        """
+        if IS_WINDOWS:
+            try:
+                import ctypes
 
-            hwnd = self._find_chrome_window()
-            if hwnd:
-                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                user32.SetForegroundWindow(hwnd)
-                user32.BringWindowToTop(hwnd)
-                time.sleep(0.5)
-        except Exception:
-            pass
+                user32 = ctypes.windll.user32
+                user32.FlashWindow(user32.GetForegroundWindow(), True)
+
+                hwnd = self._find_chrome_window()
+                if hwnd:
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                    user32.SetForegroundWindow(hwnd)
+                    user32.BringWindowToTop(hwnd)
+                    time.sleep(0.5)
+            except Exception:
+                pass
+        elif sys.platform == "darwin":
+            # macOS: use osascript to bring Chrome to the front
+            try:
+                subprocess.run(
+                    ['osascript', '-e',
+                     'tell application "Google Chrome" to activate'],
+                    capture_output=True, timeout=5
+                )
+            except Exception:
+                pass
+        else:
+            # Linux: try xdotool, then wmctrl as fallback
+            try:
+                subprocess.run(
+                    ['xdotool', 'search', '--name', 'Chrome', 'windowactivate'],
+                    capture_output=True, timeout=5
+                )
+            except FileNotFoundError:
+                try:
+                    subprocess.run(
+                        ['wmctrl', '-a', 'Chrome'],
+                        capture_output=True, timeout=5
+                    )
+                except FileNotFoundError:
+                    print("Note: xdotool/wmctrl not found — cannot bring Chrome to front.")
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
     def _find_chrome_window(self):
-        """Find the Chrome window handle using EnumWindows."""
+        """Find the Chrome window handle using EnumWindows (Windows-only).
+
+        Returns None on non-Windows platforms (window focusing is handled
+        by OS-level tools in _bring_to_front / _force_visible_topmost).
+        """
+        if not IS_WINDOWS:
+            return None
+
         try:
             import ctypes
 

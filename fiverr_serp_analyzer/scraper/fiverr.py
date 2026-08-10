@@ -9,6 +9,7 @@ import random
 from datetime import datetime, timezone
 from urllib.parse import quote_plus
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
     TimeoutException,
@@ -29,6 +30,35 @@ from utils.normalization import normalize_url
 
 class FiverrCollector:
     """Collects Fiverr SERP data for a list of keywords."""
+
+    # Popup/overlay dismissal selectors and button texts
+    _POPUP_CLOSE_SELECTORS = [
+        "button[aria-label='Close']",
+        "button[aria-label='close']",
+        "[data-close-button]",
+        "button.close",
+        "button[class*='close']",
+        "a[class*='close']",
+        "svg[class*='close']",
+        "[class*='modal'] button",
+        "[class*='overlay'] button",
+        "button[data-dismiss]",
+    ]
+
+    _POPUP_BUTTON_TEXTS = [
+        "got it",
+        "accept",
+        "accept all",
+        "ok",
+        "okay",
+        "continue",
+        "agree",
+        "i agree",
+        "dismiss",
+        "no thanks",
+        "maybe later",
+        "skip",
+    ]
 
     def __init__(self, browser_manager, config: dict,
                  col_logger=None, err_logger=None):
@@ -53,6 +83,83 @@ class FiverrCollector:
             err_logger=err_logger,
         )
 
+    # ------------------------------------------------------------------
+    # Popup / overlay dismissal
+    # ------------------------------------------------------------------
+
+    def _dismiss_popups(self, driver):
+        """Aggressively dismiss any overlay, tooltip, cookie banner, or modal.
+
+        Fiverr frequently shows:
+          - "Hourly rates filter [New]" tooltip with a "Got it" button
+          - Cookie consent banners
+          - Newsletter / sign-up modals
+          - Promotional overlays with close buttons
+
+        Strategy (best-effort, never raises):
+          1. Look for buttons whose visible text matches known dismissal
+             phrases and click them.
+          2. Click any close/X controls found via ARIA / class selectors.
+          3. Press Escape to collapse any remaining modals.
+        """
+        try:
+            # --- Step 1: click labelled dismiss buttons -------------------
+            for text in self._POPUP_BUTTON_TEXTS:
+                try:
+                    buttons = driver.find_elements(
+                        By.XPATH,
+                        (
+                            "//button["
+                            "  translate(normalize-space(text()),"
+                            "  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
+                            "  'abcdefghijklmnopqrstuvwxyz') = '{text}'"
+                            "] | //a["
+                            "  translate(normalize-space(text()),"
+                            "  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
+                            "  'abcdefghijklmnopqrstuvwxyz') = '{text}'"
+                            "] | //span[@role='button']["
+                            "  translate(normalize-space(text()),"
+                            "  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
+                            "  'abcdefghijklmnopqrstuvwxyz') = '{text}'"
+                            "]"
+                        ).format(text=text)
+                    )
+                    for btn in buttons:
+                        try:
+                            if btn.is_displayed():
+                                btn.click()
+                                time.sleep(0.3)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            # --- Step 2: click close / X controls -------------------------
+            for sel in self._POPUP_CLOSE_SELECTORS:
+                try:
+                    elements = driver.find_elements(By.CSS_SELECTOR, sel)
+                    for el in elements:
+                        try:
+                            if el.is_displayed():
+                                el.click()
+                                time.sleep(0.2)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            # --- Step 3: press Escape ------------------------------------
+            try:
+                body = driver.find_element(By.TAG_NAME, "body")
+                body.send_keys(Keys.ESCAPE)
+                time.sleep(0.3)
+            except Exception:
+                pass
+
+        except Exception:
+            # _dismiss_popups is best-effort; never break the main flow
+            pass
+
     def _build_search_url(self, keyword: str) -> str:
         """Build the Fiverr search URL for a keyword."""
         encoded = quote_plus(keyword)
@@ -75,25 +182,57 @@ class FiverrCollector:
     def _wait_for_gig_cards(self, driver, timeout: int = None):
         """Wait for gig cards to actually render on the page.
 
-        Fiverr loads results dynamically via JavaScript. Waiting for <body>
-        is NOT enough — we must wait for the actual gig card elements.
+        Fiverr loads results dynamically via React. Waiting for <body> or even
+        ``presence_of_element_located`` on a card selector is NOT enough —
+        React may have created empty DOM shells whose content hasn't populated
+        yet.
+
+        This method waits for at least one card to be present AND contain
+        visible text, confirming that React has finished hydrating the cards.
         """
         if timeout is None:
             timeout = self.config.get("browser", {}).get("page_timeout", 30)
         from selenium.webdriver.support.ui import WebDriverWait
 
+        deadline = time.time() + timeout
+
         for sel in GIG_CARD_SELECTORS:
             try:
-                WebDriverWait(driver, timeout).until(
+                # Phase 1 — wait for any matching element to appear in the DOM
+                WebDriverWait(driver, max(1, deadline - time.time())).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, sel))
                 )
-                return True
+
+                # Phase 2 — poll until at least one card has populated text
+                # (React renders shells first, then hydrates content)
+                while time.time() < deadline:
+                    cards = driver.find_elements(By.CSS_SELECTOR, sel)
+                    for card in cards:
+                        try:
+                            text = card.text.strip()
+                            if text and len(text) > 10:
+                                return True
+                        except StaleElementReferenceException:
+                            continue
+                    time.sleep(0.5)
+
+                # Timed out — cards present but never got text content
+                return False
+
             except TimeoutException:
                 continue
+
         return False
 
     def _find_gig_cards(self, driver):
-        """Find all visible gig cards on the page."""
+        """Find all visible gig cards on the page.
+
+        Tries the configured CSS selectors first, then falls back to a more
+        robust strategy: find any ``<a href*='/gig/'>`` links and climb to
+        their nearest card-like container.  This catches cards whose outer
+        wrapper class has changed between Fiverr deployments.
+        """
+        # --- Strategy 1: known CSS selectors -----------------------------
         for sel in GIG_CARD_SELECTORS:
             try:
                 cards = driver.find_elements(By.CSS_SELECTOR, sel)
@@ -101,6 +240,47 @@ class FiverrCollector:
                     return cards, sel
             except Exception:
                 continue
+
+        # --- Strategy 2: find gig links, climb to card containers --------
+        try:
+            gig_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/gig/']")
+            if gig_links:
+                cards = []
+                seen = set()
+                for link in gig_links:
+                    try:
+                        # Climb up to find the nearest card-like wrapper
+                        parent = link
+                        card_container = link
+                        for _ in range(6):
+                            try:
+                                parent = parent.find_element(By.XPATH, "..")
+                            except Exception:
+                                break
+                            cls = (parent.get_attribute("class") or "").lower()
+                            if any(pat in cls for pat in (
+                                "gig-card", "gig-wrapper", "basic-gig",
+                                "gig-card-layout",
+                            )):
+                                card_container = parent
+                                break
+                            # Also accept any div/article/li with a meaningful class
+                            tag = parent.tag_name.lower()
+                            if tag in ("div", "article", "li") and cls:
+                                card_container = parent
+                                break
+                        elem_id = card_container.id if (hasattr(card_container, 'id') and card_container.id) else id(card_container)
+                        if elem_id not in seen:
+                            seen.add(elem_id)
+                            cards.append(card_container)
+                    except Exception:
+                        continue
+
+                if cards:
+                    return cards, "a[href*='/gig/'] (climbed to container)"
+        except Exception:
+            pass
+
         return [], None
 
     def _extract_gig_data(self, card, keyword: str, position: int) -> dict:
@@ -174,6 +354,18 @@ class FiverrCollector:
         }
         return gig_record
 
+    def _log_page_state(self, driver, keyword: str, context: str):
+        """Print page title + visible body text snippet for debugging."""
+        try:
+            title = driver.title
+            body_el = driver.find_element(By.TAG_NAME, "body")
+            body_text = body_el.text[:800] if body_el else "(no body)"
+            print(f"\n  [{context}] keyword='{keyword}'")
+            print(f"  Page title: {title}")
+            print(f"  Body snippet (first 800 chars):\n{body_text}\n")
+        except Exception:
+            print(f"\n  [{context}] keyword='{keyword}' — could not read page state")
+
     def collect_keyword(self, keyword: str) -> dict:
         """Collect SERP data for a single keyword.
 
@@ -203,6 +395,9 @@ class FiverrCollector:
                 driver.get(url)
                 self._wait_for_page_load(driver)
 
+                # --- Dismiss popups after navigation ---
+                self._dismiss_popups(driver)
+
                 # Challenge detection
                 if self.challenge_detector.detect(driver):
                     result["challenge_paused"] = True
@@ -213,13 +408,16 @@ class FiverrCollector:
                         result["error"] = "max_challenges_exceeded"
                         return result
 
+                    # --- Dismiss popups that may appear after challenge solve ---
+                    self._dismiss_popups(driver)
+
                 # Random delay before interaction
                 self.interaction.random_delay(self.delay_min, self.delay_max)
 
                 # WAIT for gig cards to actually render (dynamic JS loading)
                 cards_rendered = self._wait_for_gig_cards(driver)
                 if not cards_rendered:
-                    # Save screenshot + HTML for debugging
+                    self._log_page_state(driver, keyword, "no_gig_cards_rendered")
                     self.browser.save_screenshot(keyword)
                     self.browser.save_html(keyword)
                     result["error"] = "no_gig_cards_found"
@@ -239,8 +437,12 @@ class FiverrCollector:
                 # Scroll to load more gig cards
                 self.interaction.progressive_scroll(driver, target_count=self.top_n)
 
-                # Small settle pause
-                time.sleep(random.uniform(1, 2))
+                # --- Dismiss any popups that appeared during scroll ---
+                self._dismiss_popups(driver)
+
+                # Longer settle pause for lazy-loaded images / cards to fully
+                # render (was 1-2 s, which is too short for React hydration)
+                time.sleep(3)
 
                 # Optional mouse movement
                 self.interaction.gentle_mouse_move(driver)
@@ -248,7 +450,7 @@ class FiverrCollector:
                 # Find gig cards
                 cards, card_selector = self._find_gig_cards(driver)
                 if not cards:
-                    # Save screenshot + HTML for debugging
+                    self._log_page_state(driver, keyword, "no_gig_cards_matched")
                     self.browser.save_screenshot(keyword)
                     self.browser.save_html(keyword)
                     result["error"] = "no_gig_cards_found"
@@ -313,6 +515,7 @@ class FiverrCollector:
                     print(f"  Retrying ({retries}/{self.max_retries})...")
                     time.sleep(random.uniform(2, 4))
                 else:
+                    self._log_page_state(driver, keyword, "extraction_returned_no_gigs")
                     result["error"] = "extraction_returned_no_gigs"
                     return result
 
