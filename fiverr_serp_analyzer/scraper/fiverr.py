@@ -100,68 +100,46 @@ class FiverrCollector:
     def _dismiss_popups(self, driver):
         """Aggressively dismiss Fiverr overlays, tooltips, and modals.
 
-        Fiverr frequently shows a "Got it" tooltip for new features
-        (e.g. "Hourly rates filter [New]") that blocks scraping.
-        This method tries MULTIPLE approaches to dismiss it.
+        Uses JavaScript to directly hide overlay elements, then clicks
+        any remaining dismiss buttons.
         """
-        # Give the popup time to render before attempting to dismiss
-        time.sleep(2)
+        time.sleep(3)
 
-        # Approach 1: "Got it" button via XPATH — most common Fiverr popup
+        # Strategy 1: JavaScript — directly kill the popup container
+        kill_js = """
+        // Remove "Got it" / "Hourly rates filter" tooltip
+        var els = document.querySelectorAll('[class*="tooltip"], [class*="popup"], [class*="overlay"], [class*="modal"], [class*="callout"], [class*="onboarding"]');
+        els.forEach(function(el) {
+            var txt = (el.textContent || '').toLowerCase();
+            if (txt.indexOf('got it') >= 0 || txt.indexOf('hourly') >= 0 || txt.indexOf('accept') >= 0) {
+                el.remove();
+            }
+        });
+        // Click any "Got it" button directly
+        var all = document.querySelectorAll('button, a, span[role="button"]');
+        for (var i = 0; i < all.length; i++) {
+            var t = (all[i].textContent || '').trim().toLowerCase();
+            if (t === 'got it' || t === 'accept' || t === 'ok' || t === 'continue' || t === 'dismiss' || t === 'skip') {
+                all[i].click();
+            }
+        }
+        """
         try:
-            btns = driver.find_elements(By.XPATH,
-                "//button[contains(translate(text(), "
-                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-                "'abcdefghijklmnopqrstuvwxyz'), 'got it')]")
-            for b in btns:
-                try:
-                    if b.is_displayed():
-                        b.click()
-                        time.sleep(0.5)
-                except Exception:
-                    pass
+            driver.execute_script(kill_js)
+            time.sleep(1)
         except Exception:
             pass
 
-        # Approach 3: Click ALL visible buttons with known dismiss texts
-        for text in self._POPUP_BUTTON_TEXTS:
-            try:
-                btns = driver.find_elements(By.XPATH,
-                    f"//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text}')]")
-                for b in btns:
-                    try:
-                        if b.is_displayed():
-                            b.click()
-                            time.sleep(0.2)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-        # Approach 4: CSS close selectors
-        for sel in self._POPUP_CLOSE_SELECTORS:
-            try:
-                for el in driver.find_elements(By.CSS_SELECTOR, sel):
-                    try:
-                        if el.is_displayed():
-                            el.click()
-                            time.sleep(0.2)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-        # Approach 5: Escape key
+        # Strategy 2: Escape key
         try:
             driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
-            time.sleep(0.3)
+            time.sleep(0.5)
         except Exception:
             pass
 
-        # Approach 6: Click anywhere outside popup on body
+        # Strategy 3: Click center of page (dismisses some overlays)
         try:
-            body = driver.find_element(By.TAG_NAME, "body")
-            webdriver.ActionChains(driver).move_to_element_with_offset(body, 10, 10).click().perform()
+            webdriver.ActionChains(driver).move_by_offset(400, 300).click().perform()
             time.sleep(0.3)
         except Exception:
             pass
@@ -216,7 +194,7 @@ class FiverrCollector:
                     for card in cards:
                         try:
                             text = card.text.strip()
-                            if text and len(text) > 10:
+                            if text and len(text) > 3:
                                 return True
                         except StaleElementReferenceException:
                             continue
